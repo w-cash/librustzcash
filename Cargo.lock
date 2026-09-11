@@ -6608,6 +6608,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af190c94f2773fdb3729c55b007a722abb5384da03bc0986df4c289bf5567e96"
 
 [[package]]
+name = "wcash_wallet_core"
+version = "0.1.0"
+dependencies = [
+ "bech32",
+ "blake2b_simd",
+ "bs58",
+ "f4jumble",
+ "hex",
+ "orchard",
+ "secrecy",
+ "static_assertions",
+ "thiserror 2.0.12",
+ "zcash_address",
+ "zcash_encoding 0.4.0",
+ "zcash_keys",
+ "zcash_protocol",
+ "zcash_transparent",
+ "zip32",
+]
+
+[[package]]
 name = "weak-table"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
