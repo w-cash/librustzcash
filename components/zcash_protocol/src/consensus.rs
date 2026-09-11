@@ -404,6 +404,15 @@ pub trait Parameters: Clone {
     /// if an activation height has been set.
     fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight>;
 
+    /// Returns the transaction consensus branch ID used for `nu`.
+    ///
+    /// The default preserves the standard Zcash mapping. Independent chains
+    /// that reuse a Zcash rule set override this method with their own globally
+    /// unique signature domain.
+    fn branch_id_for_upgrade(&self, nu: NetworkUpgrade) -> BranchId {
+        nu.branch_id()
+    }
+
     /// Determines whether the specified network upgrade is active as of the
     /// provided block height on the network to which this Parameters value applies.
     fn is_nu_active(&self, nu: NetworkUpgrade, height: BlockHeight) -> bool {
@@ -418,6 +427,10 @@ impl<P: Parameters> Parameters for &P {
 
     fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
         (*self).activation_height(nu)
+    }
+
+    fn branch_id_for_upgrade(&self, nu: NetworkUpgrade) -> BranchId {
+        (*self).branch_id_for_upgrade(nu)
     }
 }
 
@@ -652,7 +665,8 @@ impl fmt::Display for NetworkUpgrade {
 impl NetworkUpgrade {
     /// Returns the consensus branch ID activated by this network upgrade.
     ///
-    /// This is the inverse of [`BranchId::network_upgrade`].
+    /// This is the standard Zcash mapping. Independent chains can override it
+    /// through [`Parameters::branch_id_for_upgrade`].
     pub fn branch_id(self) -> BranchId {
         match self {
             NetworkUpgrade::Overwinter => BranchId::Overwinter,
@@ -745,6 +759,12 @@ pub enum BranchId {
     Nu6_2,
     /// The consensus rules to be deployed by [`NetworkUpgrade::Nu6_3`].
     Nu6_3,
+    /// Wcash Testnet v1 rules, using NU6.3 / Ironwood semantics with a
+    /// chain-specific transaction signature domain.
+    WcashTestnetV1,
+    /// Wcash Regtest v1 rules, using NU6.3 / Ironwood semantics with a
+    /// local-network transaction signature domain.
+    WcashRegtestV1,
     /// The consensus rules to be deployed by [`NetworkUpgrade::Nu7`].
     #[cfg(zcash_unstable = "nu7")]
     Nu7,
@@ -772,6 +792,8 @@ impl TryFrom<u32> for BranchId {
             0x4dec_4df0 => Ok(BranchId::Nu6_1),
             0x5437_f330 => Ok(BranchId::Nu6_2),
             0x37a5_165b => Ok(BranchId::Nu6_3),
+            0xb3cf_d27e => Ok(BranchId::WcashTestnetV1),
+            0xc3a6_678a => Ok(BranchId::WcashRegtestV1),
             #[cfg(zcash_unstable = "nu7")]
             0xffff_ffff => Ok(BranchId::Nu7),
             #[cfg(zcash_unstable = "nutachyon")]
@@ -795,6 +817,8 @@ impl From<BranchId> for u32 {
             BranchId::Nu6_1 => 0x4dec_4df0,
             BranchId::Nu6_2 => 0x5437_f330,
             BranchId::Nu6_3 => 0x37a5_165b,
+            BranchId::WcashTestnetV1 => 0xb3cf_d27e,
+            BranchId::WcashRegtestV1 => 0xc3a6_678a,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7 => 0xffff_ffff,
             #[cfg(zcash_unstable = "nutachyon")]
@@ -811,7 +835,7 @@ impl BranchId {
     pub fn for_height<P: Parameters>(parameters: &P, height: BlockHeight) -> Self {
         for nu in UPGRADES_IN_ORDER.iter().rev() {
             if parameters.is_nu_active(*nu, height) {
-                return nu.branch_id();
+                return parameters.branch_id_for_upgrade(*nu);
             }
         }
 
@@ -822,7 +846,8 @@ impl BranchId {
     /// Returns the network upgrade that activates this set of consensus rules, or
     /// `None` for the pre-Overwinter Sprout rules, which have no activation height.
     ///
-    /// This is the inverse of [`NetworkUpgrade::branch_id`].
+    /// Independent chains can assign different branch IDs to the same network
+    /// upgrade semantics, so this mapping is not necessarily one-to-one.
     pub fn network_upgrade(&self) -> Option<NetworkUpgrade> {
         Some(match self {
             BranchId::Sprout => return None,
@@ -836,6 +861,7 @@ impl BranchId {
             BranchId::Nu6_1 => NetworkUpgrade::Nu6_1,
             BranchId::Nu6_2 => NetworkUpgrade::Nu6_2,
             BranchId::Nu6_3 => NetworkUpgrade::Nu6_3,
+            BranchId::WcashTestnetV1 | BranchId::WcashRegtestV1 => NetworkUpgrade::Nu6_3,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7 => NetworkUpgrade::Nu7,
             #[cfg(zcash_unstable = "nutachyon")]
@@ -898,8 +924,9 @@ impl BranchId {
             BranchId::Nu6_2 => params
                 .activation_height(NetworkUpgrade::Nu6_2)
                 .map(|lower| (lower, params.activation_height(NetworkUpgrade::Nu6_3))),
-            BranchId::Nu6_3 => params
+            BranchId::Nu6_3 | BranchId::WcashTestnetV1 | BranchId::WcashRegtestV1 => params
                 .activation_height(NetworkUpgrade::Nu6_3)
+                .filter(|_| params.branch_id_for_upgrade(NetworkUpgrade::Nu6_3) == *self)
                 .map(|lower| {
                     #[cfg(zcash_unstable = "nutachyon")]
                     let nu_tachyon = params.activation_height(NetworkUpgrade::NuTachyon);
@@ -936,7 +963,7 @@ impl BranchId {
         match self {
             Sprout | Overwinter | Sapling | Blossom | Heartwood | Canopy | Nu5 | Nu6 | Nu6_1
             | Nu6_2 => true,
-            BranchId::Nu6_3 => true,
+            BranchId::Nu6_3 | BranchId::WcashTestnetV1 | BranchId::WcashRegtestV1 => true,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7 => false,
             #[cfg(zcash_unstable = "nutachyon")]
@@ -950,7 +977,7 @@ impl BranchId {
         match self {
             Sprout | Overwinter => false,
             Sapling | Blossom | Heartwood | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 => true,
-            BranchId::Nu6_3 => true,
+            BranchId::Nu6_3 | BranchId::WcashTestnetV1 | BranchId::WcashRegtestV1 => true,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7 => true,
             #[cfg(zcash_unstable = "nutachyon")]
@@ -964,7 +991,7 @@ impl BranchId {
         match self {
             Sprout | Overwinter | Sapling | Blossom | Heartwood | Canopy => false,
             Nu5 | Nu6 | Nu6_1 | Nu6_2 => true,
-            BranchId::Nu6_3 => true,
+            BranchId::Nu6_3 | BranchId::WcashTestnetV1 | BranchId::WcashRegtestV1 => true,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7 => true,
             #[cfg(zcash_unstable = "nutachyon")]
@@ -981,7 +1008,7 @@ impl BranchId {
             Sprout | Overwinter | Sapling | Blossom | Heartwood | Canopy => None,
             Nu5 | Nu6 | Nu6_1 => Some(OrchardProtocolRevision::InsecureV1),
             Nu6_2 => Some(OrchardProtocolRevision::V2),
-            Nu6_3 => Some(OrchardProtocolRevision::V3),
+            Nu6_3 | WcashTestnetV1 | WcashRegtestV1 => Some(OrchardProtocolRevision::V3),
             #[cfg(zcash_unstable = "nu7")]
             Nu7 => Some(OrchardProtocolRevision::V3),
             #[cfg(zcash_unstable = "nutachyon")]
@@ -1033,6 +1060,8 @@ pub mod testing {
             BranchId::Nu6_1,
             BranchId::Nu6_2,
             BranchId::Nu6_3,
+            BranchId::WcashTestnetV1,
+            BranchId::WcashRegtestV1,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7,
             #[cfg(zcash_unstable = "nutachyon")]
@@ -1081,8 +1110,52 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use super::{
-        BlockHeight, BranchId, MAIN_NETWORK, NetworkUpgrade, Parameters, UPGRADES_IN_ORDER,
+        BlockHeight, BranchId, MAIN_NETWORK, NetworkType, NetworkUpgrade, Parameters,
+        UPGRADES_IN_ORDER,
     };
+
+    const WCASH_TESTNET_BRANCH_ID: u32 = 0xb3cf_d27e;
+    const WCASH_REGTEST_BRANCH_ID: u32 = 0xc3a6_678a;
+
+    #[derive(Clone)]
+    struct WcashTestnetParameters;
+
+    impl Parameters for WcashTestnetParameters {
+        fn network_type(&self) -> NetworkType {
+            NetworkType::Test
+        }
+
+        fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
+            (nu == NetworkUpgrade::Nu6_3).then_some(BlockHeight::from_u32(1))
+        }
+
+        fn branch_id_for_upgrade(&self, nu: NetworkUpgrade) -> BranchId {
+            match nu {
+                NetworkUpgrade::Nu6_3 => BranchId::WcashTestnetV1,
+                _ => nu.branch_id(),
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct WcashRegtestParameters;
+
+    impl Parameters for WcashRegtestParameters {
+        fn network_type(&self) -> NetworkType {
+            NetworkType::Regtest
+        }
+
+        fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
+            (nu == NetworkUpgrade::Nu6_3).then_some(BlockHeight::from_u32(1))
+        }
+
+        fn branch_id_for_upgrade(&self, nu: NetworkUpgrade) -> BranchId {
+            match nu {
+                NetworkUpgrade::Nu6_3 => BranchId::WcashRegtestV1,
+                _ => nu.branch_id(),
+            }
+        }
+    }
 
     #[test]
     fn nu_ordering() {
@@ -1114,12 +1187,80 @@ mod tests {
     #[test]
     fn branch_id_from_u32() {
         assert_eq!(BranchId::try_from(0), Ok(BranchId::Sprout));
+        assert_eq!(
+            BranchId::try_from(WCASH_TESTNET_BRANCH_ID),
+            Ok(BranchId::WcashTestnetV1)
+        );
+        assert_eq!(u32::from(BranchId::WcashTestnetV1), WCASH_TESTNET_BRANCH_ID);
+        assert_eq!(
+            BranchId::try_from(WCASH_REGTEST_BRANCH_ID),
+            Ok(BranchId::WcashRegtestV1)
+        );
+        assert_eq!(u32::from(BranchId::WcashRegtestV1), WCASH_REGTEST_BRANCH_ID);
         #[cfg(zcash_unstable = "nutachyon")]
         {
             assert_eq!(BranchId::try_from(0xffff_fffc), Ok(BranchId::NuTachyon));
             assert_eq!(u32::from(BranchId::NuTachyon), 0xffff_fffc);
         }
         assert!(BranchId::try_from(1).is_err());
+    }
+
+    #[test]
+    fn wcash_testnet_has_an_independent_transaction_domain() {
+        let params = WcashTestnetParameters;
+
+        assert_eq!(
+            BranchId::for_height(&params, BlockHeight::from_u32(0)),
+            BranchId::Sprout
+        );
+        assert_eq!(
+            BranchId::for_height(&params, BlockHeight::from_u32(1)),
+            BranchId::WcashTestnetV1
+        );
+        assert_eq!(
+            BranchId::WcashTestnetV1.network_upgrade(),
+            Some(NetworkUpgrade::Nu6_3)
+        );
+        assert!(BranchId::WcashTestnetV1.height_bounds(&params).is_some());
+        assert!(BranchId::Nu6_3.height_bounds(&params).is_none());
+        assert!(
+            BranchId::WcashTestnetV1
+                .height_bounds(&MAIN_NETWORK)
+                .is_none()
+        );
+        assert_eq!(
+            BranchId::for_height(&MAIN_NETWORK, BlockHeight::from_u32(3_428_143)),
+            BranchId::Nu6_3
+        );
+        assert_ne!(
+            u32::from(BranchId::WcashTestnetV1),
+            u32::from(BranchId::Nu6_3)
+        );
+    }
+
+    #[test]
+    fn wcash_regtest_has_an_independent_transaction_domain() {
+        let params = WcashRegtestParameters;
+
+        assert_eq!(
+            BranchId::for_height(&params, BlockHeight::from_u32(0)),
+            BranchId::Sprout
+        );
+        assert_eq!(
+            BranchId::for_height(&params, BlockHeight::from_u32(1)),
+            BranchId::WcashRegtestV1
+        );
+        assert_eq!(
+            BranchId::WcashRegtestV1.network_upgrade(),
+            Some(NetworkUpgrade::Nu6_3)
+        );
+        assert!(BranchId::WcashRegtestV1.height_bounds(&params).is_some());
+        assert!(BranchId::WcashTestnetV1.height_bounds(&params).is_none());
+        assert!(BranchId::Nu6_3.height_bounds(&params).is_none());
+        assert_ne!(
+            u32::from(BranchId::WcashRegtestV1),
+            u32::from(BranchId::WcashTestnetV1)
+        );
     }
 
     #[test]
@@ -1141,6 +1282,14 @@ mod tests {
         );
         assert_eq!(
             BranchId::Nu6_3.orchard_protocol_revision(),
+            Some(OrchardProtocolRevision::V3)
+        );
+        assert_eq!(
+            BranchId::WcashTestnetV1.orchard_protocol_revision(),
+            Some(OrchardProtocolRevision::V3)
+        );
+        assert_eq!(
+            BranchId::WcashRegtestV1.orchard_protocol_revision(),
             Some(OrchardProtocolRevision::V3)
         );
         #[cfg(zcash_unstable = "nu7")]

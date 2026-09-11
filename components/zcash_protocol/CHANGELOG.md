@@ -10,6 +10,10 @@ workspace.
 
 ## [Unreleased]
 
+### Added
+- `zcash_protocol::consensus::Parameters::branch_id_for_upgrade`
+- `zcash_protocol::consensus::BranchId::{WcashTestnetV1, WcashRegtestV1}`
+
 ## [0.10.6] - 2026-09-04
 
 ### Added

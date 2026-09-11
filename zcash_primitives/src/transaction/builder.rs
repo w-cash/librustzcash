@@ -68,6 +68,39 @@ impl<FE: fmt::Display> fmt::Display for FeeError<FE> {
     }
 }
 
+/// An explicitly selected transaction branch did not match the consensus
+/// parameters at the target height.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BranchIdMismatch {
+    expected: BranchId,
+    actual: BranchId,
+}
+
+impl BranchIdMismatch {
+    /// Returns the branch selected by the consensus parameters.
+    pub fn expected(&self) -> BranchId {
+        self.expected
+    }
+
+    /// Returns the branch explicitly supplied by the caller.
+    pub fn actual(&self) -> BranchId {
+        self.actual
+    }
+}
+
+impl fmt::Display for BranchIdMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "explicit consensus branch {:?} does not match expected branch {:?}",
+            self.actual, self.expected
+        )
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for BranchIdMismatch {}
+
 /// Errors that can occur during transaction construction.
 #[derive(Debug)]
 pub enum Error<FE> {
@@ -901,7 +934,7 @@ impl<P, U> Builder<P, U> {
             // Ironwood is available only when the target version carries an Ironwood bundle
             // and the consensus branch is one in which Ironwood is active.
             let ironwood_branch = match self.consensus_branch_id {
-                BranchId::Nu6_3 => true,
+                BranchId::Nu6_3 | BranchId::WcashTestnetV1 | BranchId::WcashRegtestV1 => true,
                 #[cfg(zcash_unstable = "nu7")]
                 BranchId::Nu7 => true,
                 #[cfg(zcash_unstable = "nutachyon")]
@@ -946,6 +979,43 @@ impl<P: consensus::Parameters> Builder<P, ()> {
     /// expiry delta (20 blocks).
     pub fn new(params: P, target_height: BlockHeight, build_config: BuildConfig) -> Self {
         let consensus_branch_id = BranchId::for_height(&params, target_height);
+        Self::new_for_branch_id(params, target_height, consensus_branch_id, build_config)
+    }
+
+    /// Creates a builder for an explicitly selected consensus branch ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BranchIdMismatch`] unless `consensus_branch_id` is exactly the
+    /// branch selected by `params` at `target_height`.
+    pub fn new_with_branch_id(
+        params: P,
+        target_height: BlockHeight,
+        consensus_branch_id: BranchId,
+        build_config: BuildConfig,
+    ) -> Result<Self, BranchIdMismatch> {
+        let expected = BranchId::for_height(&params, target_height);
+        if consensus_branch_id != expected {
+            return Err(BranchIdMismatch {
+                expected,
+                actual: consensus_branch_id,
+            });
+        }
+
+        Ok(Self::new_for_branch_id(
+            params,
+            target_height,
+            consensus_branch_id,
+            build_config,
+        ))
+    }
+
+    fn new_for_branch_id(
+        params: P,
+        target_height: BlockHeight,
+        consensus_branch_id: BranchId,
+        build_config: BuildConfig,
+    ) -> Self {
         // `bundle_version_for_branch` returns `Some` exactly for the branches in
         // which the Orchard pool is supported (NU5 onward), so this also gates
         // Orchard builder construction on NU5 activation.
@@ -1925,7 +1995,7 @@ mod tests {
         incrementalmerkletree::{frontier::CommitmentTree, witness::IncrementalWitness},
         rand_core::OsRng,
         zcash_protocol::{
-            consensus::{BlockHeight, NetworkUpgrade, Parameters, TEST_NETWORK},
+            consensus::{BlockHeight, NetworkType, NetworkUpgrade, Parameters, TEST_NETWORK},
             memo::MemoBytes,
             value::{BalanceError, ZatBalance, Zatoshis},
         },
@@ -1965,6 +2035,63 @@ mod tests {
             #[cfg(zcash_unstable = "nutachyon")]
             nu_tachyon: None,
         }
+    }
+
+    #[cfg(feature = "circuits")]
+    #[derive(Clone)]
+    struct WcashTestnetParameters;
+
+    #[cfg(feature = "circuits")]
+    impl Parameters for WcashTestnetParameters {
+        fn network_type(&self) -> NetworkType {
+            NetworkType::Test
+        }
+
+        fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
+            (nu == NetworkUpgrade::Nu6_3).then_some(BlockHeight::from_u32(1))
+        }
+
+        fn branch_id_for_upgrade(&self, nu: NetworkUpgrade) -> BranchId {
+            match nu {
+                NetworkUpgrade::Nu6_3 => BranchId::WcashTestnetV1,
+                _ => nu.branch_id(),
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "circuits")]
+    fn explicit_builder_branch_id_fails_closed() {
+        let build_config = || BuildConfig::Coinbase { miner_data: None };
+
+        let automatic = Builder::new(
+            WcashTestnetParameters,
+            BlockHeight::from_u32(1),
+            build_config(),
+        );
+        assert_eq!(automatic.consensus_branch_id, BranchId::WcashTestnetV1);
+        assert_eq!(automatic.tx_version, TxVersion::V6);
+
+        let explicit = Builder::new_with_branch_id(
+            WcashTestnetParameters,
+            BlockHeight::from_u32(1),
+            BranchId::WcashTestnetV1,
+            build_config(),
+        )
+        .expect("the branch selected by the parameters must be accepted");
+        assert_eq!(explicit.consensus_branch_id, BranchId::WcashTestnetV1);
+
+        let mismatch = match Builder::new_with_branch_id(
+            WcashTestnetParameters,
+            BlockHeight::from_u32(1),
+            BranchId::Nu6_3,
+            build_config(),
+        ) {
+            Ok(_) => panic!("the Zcash NU6.3 domain must not be accepted for Wcash"),
+            Err(mismatch) => mismatch,
+        };
+        assert_eq!(mismatch.expected(), BranchId::WcashTestnetV1);
+        assert_eq!(mismatch.actual(), BranchId::Nu6_3);
     }
 
     #[cfg(all(feature = "circuits", zcash_unstable = "nu7"))]

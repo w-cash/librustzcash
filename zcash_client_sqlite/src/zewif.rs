@@ -851,7 +851,8 @@ where
     for (&branch_id, &document_height) in regtest.activations() {
         let expected = BranchId::try_from(branch_id)
             .ok()
-            .and_then(|id| id.network_upgrade())
+            .and_then(|id| id.network_upgrade().map(|nu| (id, nu)))
+            .and_then(|(id, nu)| (params.branch_id_for_upgrade(nu) == id).then_some(nu))
             .and_then(|nu| params.activation_height(nu))
             .map(u32::from);
         if expected != Some(document_height) {
@@ -1833,6 +1834,58 @@ mod tests {
         let regtest = ::zewif::RegtestParams::new(activations);
         assert!(
             verify_regtest_activations::<_, core::convert::Infallible>(&params, &regtest).is_ok()
+        );
+    }
+
+    #[derive(Clone)]
+    struct WcashRegtestParameters(LocalNetwork);
+
+    impl Parameters for WcashRegtestParameters {
+        fn network_type(&self) -> NetworkType {
+            NetworkType::Regtest
+        }
+
+        fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
+            self.0.activation_height(nu)
+        }
+
+        fn branch_id_for_upgrade(&self, nu: NetworkUpgrade) -> BranchId {
+            match nu {
+                NetworkUpgrade::Nu6_3 => BranchId::WcashRegtestV1,
+                _ => nu.branch_id(),
+            }
+        }
+    }
+
+    #[test]
+    fn regtest_activation_schedule_requires_the_exact_transaction_domain() {
+        let zcash_params = regtest_local_network();
+        let wcash_params = WcashRegtestParameters(regtest_local_network());
+        let zcash_schedule =
+            ::zewif::RegtestParams::new(BTreeMap::from([(u32::from(BranchId::Nu6_3), 1)]));
+        let wcash_schedule =
+            ::zewif::RegtestParams::new(BTreeMap::from([(u32::from(BranchId::WcashRegtestV1), 1)]));
+
+        assert!(
+            verify_regtest_activations::<_, core::convert::Infallible>(
+                &wcash_params,
+                &wcash_schedule,
+            )
+            .is_ok()
+        );
+        assert!(
+            verify_regtest_activations::<_, core::convert::Infallible>(
+                &zcash_params,
+                &wcash_schedule,
+            )
+            .is_err()
+        );
+        assert!(
+            verify_regtest_activations::<_, core::convert::Infallible>(
+                &wcash_params,
+                &zcash_schedule,
+            )
+            .is_err()
         );
     }
 
