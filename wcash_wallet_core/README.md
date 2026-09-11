@@ -21,6 +21,13 @@ Zcash key types, and address derivation infers its network from the viewing
 capability. This prevents callers from rebinding Wcash key material to a Zcash
 or different Wcash textual namespace.
 
+The optional `ironwood-scanning` feature derives a cloneable, scope-bound
+`WcashScanningKey`. Its viewing capability remains opaque, so a
+consumer cannot reinterpret it as a generic Orchard or Zcash viewing key.
+`try_decrypt_compact_ironwood_batch` accepts only compact Ironwood actions,
+uses the version-3 Ironwood note-encryption domain, and derives each detected
+note's nullifier without exposing its full viewing key.
+
 The compact-block compatibility RPC currently reports `test` for both Wcash
 Testnet and Regtest. Wallets must therefore attest the exact genesis hash and
 transaction branch ID in addition to checking the RPC chain name.

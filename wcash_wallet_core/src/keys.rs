@@ -11,6 +11,9 @@ use zip32::AccountId;
 
 use crate::network::{WcashConsensusParameters, WcashNetwork};
 
+#[cfg(feature = "ironwood-scanning")]
+use {crate::scanning::WcashScanningKey, orchard::keys::Scope};
+
 /// Version of the Wcash master-seed derivation domain.
 ///
 /// Persistent wallet identities must store and compare this value before
@@ -135,6 +138,12 @@ impl WcashFullViewingKey {
     /// Returns the ZIP 32 account bound to this viewing key.
     pub const fn account(&self) -> AccountId {
         self.account
+    }
+
+    /// Restricts this viewing capability to Ironwood scanning for `scope`.
+    #[cfg(feature = "ironwood-scanning")]
+    pub fn scanning_key(&self, scope: Scope) -> WcashScanningKey {
+        WcashScanningKey::new(self, scope)
     }
 
     pub(crate) const fn transparent(&self) -> &AccountPubKey {

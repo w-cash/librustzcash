@@ -10,6 +10,10 @@ edition.workspace = true
 rust-version.workspace = true
 categories.workspace = true
 
+[features]
+default = []
+ironwood-scanning = ["dep:zcash_note_encryption"]
+
 [dependencies]
 bech32.workspace = true
 blake2b_simd.workspace = true
@@ -20,6 +24,7 @@ secrecy.workspace = true
 thiserror = "2"
 zcash_address = { workspace = true, features = ["std"] }
 zcash_encoding.workspace = true
+zcash_note_encryption = { workspace = true, optional = true }
 zcash_protocol = { workspace = true, features = ["std"] }
 zcash_transparent = { version = "0.10.0", path = "../zcash_transparent", features = ["transparent-inputs"] }
 zip32.workspace = true

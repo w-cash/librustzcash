@@ -12,6 +12,9 @@ pub mod address;
 pub mod keys;
 pub mod network;
 
+#[cfg(feature = "ironwood-scanning")]
+mod scanning;
+
 pub use address::{
     WalletAddressError, WcashAddress, WcashAddressKind, WcashAddressParseError, WcashRecipient,
     decode_recipient, encode_ironwood_receiver, encode_transparent_coinbase_receiver,
@@ -21,3 +24,9 @@ pub use keys::{
     derive_wallet_spending_key,
 };
 pub use network::{WcashGenesisHash, WcashNetwork, WcashValuePool};
+
+#[cfg(feature = "ironwood-scanning")]
+pub use scanning::{
+    WcashIronwoodDecryption, WcashScanningError, WcashScanningKey,
+    try_decrypt_compact_ironwood_batch,
+};

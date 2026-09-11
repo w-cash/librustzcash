@@ -20,6 +20,16 @@ use zcash_transparent::{
 };
 use zip32::AccountId;
 
+#[cfg(feature = "ironwood-scanning")]
+use {
+    orchard::keys::{
+        IncomingViewingKey as IronwoodIncomingViewingKey,
+        PreparedIncomingViewingKey as PreparedIronwoodIncomingViewingKey,
+    },
+    static_assertions::assert_impl_all,
+    wcash_wallet_core::WcashScanningKey,
+};
+
 // These assertions are compiled as a downstream consumer. They lock out the
 // conversion traits that would let an application rebind a Wcash capability
 // to generic Zcash network or address APIs.
@@ -31,6 +41,11 @@ assert_not_impl_any!(WcashRecipient: AsRef<UnifiedAddress>, Into<UnifiedAddress>
 assert_not_impl_any!(WcashSpendingKey: AsRef<AccountPrivKey>, Into<AccountPrivKey>, AsRef<IronwoodSpendingKey>, Into<IronwoodSpendingKey>);
 assert_not_impl_any!(WcashFullViewingKey: AsRef<AccountPubKey>, Into<AccountPubKey>, AsRef<IronwoodFullViewingKey>, Into<IronwoodFullViewingKey>);
 assert_not_impl_any!(WcashRecipient: AsRef<TransparentAddress>, Into<TransparentAddress>, AsRef<IronwoodAddress>, Into<IronwoodAddress>);
+
+#[cfg(feature = "ironwood-scanning")]
+assert_impl_all!(WcashScanningKey: Clone, Send, Sync);
+#[cfg(feature = "ironwood-scanning")]
+assert_not_impl_any!(WcashScanningKey: Copy, AsRef<UnifiedSpendingKey>, Into<UnifiedSpendingKey>, AsRef<UnifiedFullViewingKey>, Into<UnifiedFullViewingKey>, AsRef<IronwoodSpendingKey>, Into<IronwoodSpendingKey>, AsRef<IronwoodFullViewingKey>, Into<IronwoodFullViewingKey>, AsRef<IronwoodIncomingViewingKey>, Into<IronwoodIncomingViewingKey>, AsRef<PreparedIronwoodIncomingViewingKey>, Into<PreparedIronwoodIncomingViewingKey>);
 
 #[test]
 fn public_key_and_address_apis_retain_the_selected_network() {
