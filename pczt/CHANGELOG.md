@@ -11,6 +11,8 @@ workspace.
 ## [Unreleased]
 
 ### Added
+- Wcash Testnet v1 and Regtest v1 V6 transaction-domain support in PCZT Creator
+  and deferred-anchor update validation.
 - Experimental support for creating and extracting V7 PCZTs under NuTachyon,
   behind `zcash_unstable="nutachyon"`, using the V6 transaction body.
 - `pczt::roles::signer::Signer::with_transparent_sighash_policy`

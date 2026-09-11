@@ -24,6 +24,9 @@ workspace.
   `WalletRead::get_wallet_summary` is unchanged and still computes progress.
 
 ### Fixed
+- ZeWIF Regtest activation validation now requires the document's exact
+  transaction branch domain, preventing identically scheduled independent
+  chains from accepting each other's activation metadata.
 - Upgrading a wallet database whose `support_zcashd_wallet_import` migration
   ran before 2025-09-16 no longer fails with `NOT NULL constraint failed:
   accounts_new.zcashd_legacy_address_index`. In such a database every account

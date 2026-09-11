@@ -116,6 +116,16 @@ fn v4_transactions_remain_valid_in_nu6_3() {
     assert!(TxVersion::V4.valid_in_branch(BranchId::Nu6_3));
 }
 
+#[test]
+fn wcash_transaction_domains_require_v6() {
+    for branch_id in [BranchId::WcashTestnetV1, BranchId::WcashRegtestV1] {
+        assert_eq!(TxVersion::suggested_for_branch(branch_id), TxVersion::V6);
+        assert!(!TxVersion::V4.valid_in_branch(branch_id));
+        assert!(!TxVersion::V5.valid_in_branch(branch_id));
+        assert!(TxVersion::V6.valid_in_branch(branch_id));
+    }
+}
+
 #[cfg(all(test, not(zcash_unstable = "nu7")))]
 #[test]
 fn v5_auth_commitment_in_nu6_3_does_not_include_ironwood_digest() {

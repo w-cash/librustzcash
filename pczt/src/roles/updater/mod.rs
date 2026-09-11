@@ -246,7 +246,7 @@ fn ensure_anchor_update_supported(global: &Global) -> Result<(), AnchorUpdateErr
     }
 
     match BranchId::try_from(global.consensus_branch_id) {
-        Ok(BranchId::Nu6_3) => Ok(()),
+        Ok(BranchId::Nu6_3 | BranchId::WcashTestnetV1 | BranchId::WcashRegtestV1) => Ok(()),
         #[cfg(zcash_unstable = "nu7")]
         Ok(BranchId::Nu7) => Ok(()),
         #[cfg(zcash_unstable = "nutachyon")]
@@ -263,6 +263,39 @@ fn set_anchor(slot: &mut Option<[u8; 32]>, anchor: [u8; 32]) -> Result<(), Ancho
         _ => {
             *slot = Some(anchor);
             Ok(())
+        }
+    }
+}
+
+#[cfg(all(test, feature = "orchard"))]
+mod tests {
+    use zcash_protocol::consensus::BranchId;
+
+    use super::Updater;
+    use crate::roles::creator::Creator;
+
+    const TEST_EXPIRY_HEIGHT: u32 = 100;
+    const ZCASH_COIN_TYPE: u32 = 133;
+
+    #[test]
+    fn wcash_v6_domains_support_deferred_ironwood_anchors() {
+        for branch_id in [BranchId::WcashTestnetV1, BranchId::WcashRegtestV1] {
+            let pczt = Creator::new(
+                branch_id.into(),
+                TEST_EXPIRY_HEIGHT,
+                ZCASH_COIN_TYPE,
+                None,
+                None,
+            )
+            .expect("the Wcash branch must be recognized")
+            .build()
+            .expect("an empty Wcash PCZT must be constructible");
+
+            assert!(
+                Updater::new(pczt)
+                    .set_ironwood_anchor(orchard::Anchor::empty_tree())
+                    .is_ok()
+            );
         }
     }
 }

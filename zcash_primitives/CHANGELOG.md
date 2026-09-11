@@ -11,9 +11,14 @@ workspace.
 ## [Unreleased]
 
 ### Added
+- `zcash_primitives::transaction::builder::{BranchIdMismatch, Builder::new_with_branch_id}`
 - Experimental `TxVersion::V7` and `TransactionData::from_parts_v7` support
   behind `zcash_unstable="nutachyon"`. V7 is enabled by NuTachyon and initially
   uses the V6 transaction body and digest structure.
+
+### Changed
+- `TxVersion` treats the Wcash Testnet v1 and Regtest v1 signature domains as
+  V6-only domains with NU6.3 / Ironwood transaction semantics.
 
 ## [0.30.1] - 2026-08-18
 
