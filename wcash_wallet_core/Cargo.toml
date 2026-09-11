@@ -1,0 +1,36 @@
+[package]
+name = "wcash_wallet_core"
+description = "Shared chain identity, address, and key-domain primitives for Wcash wallets"
+version = "0.1.0"
+publish = false
+authors = ["Wcash developers"]
+repository = "https://github.com/w-cash/librustzcash"
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+categories.workspace = true
+
+[dependencies]
+bech32.workspace = true
+blake2b_simd.workspace = true
+bs58.workspace = true
+f4jumble = { version = "0.1.1", path = "../components/f4jumble" }
+orchard.workspace = true
+secrecy.workspace = true
+thiserror = "2"
+zcash_address = { workspace = true, features = ["std"] }
+zcash_encoding.workspace = true
+zcash_protocol = { workspace = true, features = ["std"] }
+zcash_transparent = { version = "0.10.0", path = "../zcash_transparent", features = ["transparent-inputs"] }
+zip32.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+static_assertions.workspace = true
+# Enable every legacy shielded key feature intentionally in the test graph.
+# Wcash production code must remain explicit transparent + Ironwood code even
+# when workspace feature unification enables Sapling in `zcash_keys`.
+zcash_keys = { workspace = true, features = ["orchard", "sapling", "std", "transparent-inputs"] }
+
+[lints]
+workspace = true
